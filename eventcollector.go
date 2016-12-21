@@ -52,7 +52,6 @@ func (e *EventCollectorClient) Send() error {
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 	}
 	client := &http.Client{Transport: tr}
-	fmt.Printf("%+v", e.Request)
 
 	// Make request
 	resp, err := client.Do(e.Request)
