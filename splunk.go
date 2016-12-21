@@ -18,7 +18,7 @@ var AuthEndpoint = "/servicesNS/%username%/search/auth/login"
 var SearchEndpoint = "/servicesNS/%username%/search/search/jobs/export"
 
 // Version set for releases
-var Version = "dev"
+var Version = "v1.0.3"
 
 // Client is used to persist context
 type Client struct {
