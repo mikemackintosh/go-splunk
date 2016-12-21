@@ -3,7 +3,6 @@ package splunk
 import (
 	"bytes"
 	"crypto/tls"
-	"encoding/json"
 	"encoding/xml"
 	"fmt"
 	"io/ioutil"
@@ -18,27 +17,22 @@ var AuthEndpoint = "/servicesNS/%username%/search/auth/login"
 // SearchEndpoint is the endpoint to search against
 var SearchEndpoint = "/servicesNS/%username%/search/search/jobs/export"
 
+// Version set for releases
+var Version = "dev"
+
+// Client is used to persist context
 type Client struct {
 	Hostname string
 	Context  string
 	Auth     Auth
 }
 
+// Auth controls basic xml struct
 type Auth struct {
 	XMLName    xml.Name `xml:"response"`
 	Username   string
 	SessionKey string `xml:"sessionKey"`
 }
-
-type SplunkSearchResult struct {
-	Preview bool         `json:"preview,omitempty"`
-	Last    bool         `json:"lastrow,omitempty"`
-	Offset  int          `json:"offset,omitempty"`
-	Result  SearchResult `json:"result"`
-}
-
-type SearchResults []SearchResult
-type SearchResult map[string]interface{}
 
 // buildURL generates a url for communications
 func (client *Client) buildURL(url string) string {
@@ -60,6 +54,7 @@ func NewClient(host, user, pass string) (Client, error) {
 	return client, nil
 }
 
+// Authenticate will authenticate the client to the Splunk server
 func (client *Client) Authenticate(username, password string) error {
 	data := url.Values{}
 	data.Set("username", username)
@@ -73,6 +68,10 @@ func (client *Client) Authenticate(username, password string) error {
 	}
 	httpClient := &http.Client{Transport: transCfg}
 	req, err := http.NewRequest("POST", client.buildURL(AuthEndpoint), bytes.NewBufferString(data.Encode()))
+	if err != nil {
+		return err
+	}
+
 	resp, err := httpClient.Do(req)
 	if err != nil {
 		return err
@@ -99,61 +98,4 @@ func (client *Client) Authenticate(username, password string) error {
 	// Get the sessionkey
 	client.Auth.SessionKey = auth.SessionKey
 	return nil
-}
-
-func (client *Client) Search(search, output string) (SearchResults, []error) {
-	var errors []error
-	var results SearchResults
-	// Create the data search object
-	data := url.Values{}
-	data.Set("search", search)
-
-	// Set default output type ot CSV
-	if output == "" {
-		output = "json"
-	}
-	data.Set("output_mode", output)
-
-	/* Authenticate */
-	transCfg := &http.Transport{
-		TLSClientConfig: &tls.Config{
-			InsecureSkipVerify: true,
-		}, // ignore expired SSL certificates
-	}
-	httpClient := &http.Client{Transport: transCfg}
-	req, err := http.NewRequest("POST", client.buildURL(SearchEndpoint), bytes.NewBufferString(data.Encode()))
-
-	// Add in authorization
-	req.Header.Set("Authorization", fmt.Sprintf("Splunk %s", client.Auth.SessionKey))
-	resp, err := httpClient.Do(req)
-	if err != nil {
-		errors = append(errors, err)
-		return results, errors
-	}
-	defer resp.Body.Close()
-
-	switch output {
-	case "json":
-		responseBody, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
-			errors = append(errors, err)
-			return results, errors
-		}
-		lines := strings.Split(string(responseBody), "\n")
-		for _, line := range lines {
-			if line == "\n" || len(line) <= 1 {
-				continue
-			}
-			// Decode all the JSON
-			var result SplunkSearchResult
-			err := json.Unmarshal([]byte(line), &result)
-			if err != nil {
-				errors = append(errors, fmt.Errorf("Result Parsing error: %s", err))
-				continue
-			}
-			results = append(results, result.Result)
-		}
-	}
-
-	return results, errors
 }
