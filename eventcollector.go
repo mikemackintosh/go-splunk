@@ -55,6 +55,7 @@ func (e *EventCollectorClient) Send() error {
 
 	// Make request
 	resp, err := client.Do(e.Request)
+	resp.Close = true
 	if err != nil {
 		return err
 	}
